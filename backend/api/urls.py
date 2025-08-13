@@ -13,4 +13,7 @@ urlpatterns = [
     
     # Endpoint to get a risk prediction without saving the record
     path('growth/predict/', views.predict_growth_risk_api, name='predict-growth-risk'),
+    
+    # Endpoint to predict next month's height and weight using regression model
+    path('growth/predict-next-month/', views.predict_growth, name='predict-growth'),
 ]
