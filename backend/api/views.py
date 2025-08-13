@@ -438,3 +438,24 @@ def predict_growth(request):
             {'status': 'error', 'message': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+
+# views.py
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+
+@api_view(['POST', 'OPTIONS'])  # Make sure to include OPTIONS
+def create_growth_record(request):
+    if request.method == 'OPTIONS':
+        # Handle preflight
+        response = Response()
+        response['Access-Control-Allow-Origin'] = 'http://localhost:4000'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        response['Access-Control-Max-Age'] = '86400'  # 24 hours
+        return response
+    
+    # Your existing POST handling code
+    # ...
