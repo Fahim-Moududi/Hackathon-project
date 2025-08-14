@@ -514,7 +514,12 @@ const AddGrowthRecord = () => {
           </form>
           
           {result && (
-            <Box sx={{ mt: 4, p: 3, bgcolor: 'success.light', borderRadius: 1 }}>
+            <Box sx={{ 
+              mt: 4, 
+              p: 3, 
+              borderRadius: 1,
+              bgcolor: result.classification === 'Normal' ? 'success.light' : 'error.light'
+            }}>
               <Typography variant="h6" gutterBottom>Results</Typography>
               <Grid container spacing={2}>
                 <Grid item xs={6}>

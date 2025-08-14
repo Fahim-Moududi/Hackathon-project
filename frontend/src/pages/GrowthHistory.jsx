@@ -633,14 +633,12 @@ const GrowthHistory = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Date</TableCell>
-                    <TableCell>Child</TableCell>
                     <TableCell align="right">Age</TableCell>
                     <TableCell align="right">Weight (kg)</TableCell>
                     <TableCell align="right">Height (cm)</TableCell>
                     <TableCell align="right">Weight Z-Score</TableCell>
                     <TableCell align="right">Height Z-Score</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -655,9 +653,6 @@ const GrowthHistory = () => {
                         >
                           <TableCell>
                             {format(parseISO(record.date), 'MMM d, yyyy')}
-                          </TableCell>
-                          <TableCell>
-                            {record.baby_name || 'N/A'}
                           </TableCell>
                           <TableCell align="right">
                             {record.age_months} mo
@@ -675,41 +670,16 @@ const GrowthHistory = () => {
                             {getZScore(record, 'height') !== null ? getZScore(record, 'height').toFixed(2) : 'N/A'}
                           </TableCell>
                           <TableCell>
-                            <StatusChip 
-                              size="small"
-                              status={record.anomaly ? 'warning' : 'normal'}
-                              label={record.classification || 'Normal'}
-                              icon={record.anomaly ? <WarningIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
-                            />
-                          </TableCell>
-                          <TableCell align="center">
-                            <Tooltip title="Edit record">
-                              <IconButton 
-                                size="small" 
-                                color="primary"
-                                onClick={() => navigate(`/edit-growth/${record.id}`)}
-                                disabled={loading}
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete record">
-                              <IconButton 
-                                size="small" 
-                                color="error"
-                                onClick={() => handleDeleteRecord(record.id)}
-                                disabled={loading}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
+                            <Typography variant="body2">
+                              {record.classification || 'Normal'}
+                            </Typography>
                           </TableCell>
                         </TableRow>
                       ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
-                        <Typography color="text.secondary">
+                      <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                        <Typography color="text.secondary" gutterBottom>
                           No growth records found
                         </Typography>
                         <Button
