@@ -122,14 +122,28 @@ const authService = {
 
   // Get current user
   getCurrentUser: () => {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    try {
+      const user = localStorage.getItem('user');
+      if (!user) return null;
+      return typeof user === 'string' ? JSON.parse(user) : user;
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+      localStorage.removeItem('user'); // Clear invalid data
+      return null;
+    }
   },
 
   // Get current baby
   getCurrentBaby: () => {
-    const baby = localStorage.getItem('baby');
-    return baby ? JSON.parse(baby) : null;
+    try {
+      const baby = localStorage.getItem('baby');
+      if (!baby) return null;
+      return typeof baby === 'string' ? JSON.parse(baby) : baby;
+    } catch (error) {
+      console.error('Error parsing baby data:', error);
+      localStorage.removeItem('baby'); // Clear invalid data
+      return null;
+    }
   },
 
   // Check if user is authenticated

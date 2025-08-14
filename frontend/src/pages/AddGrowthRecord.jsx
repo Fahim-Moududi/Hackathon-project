@@ -59,6 +59,11 @@ const AddGrowthRecord = () => {
   const [error, setError] = useState('');
   const [ageMonths, setAgeMonths] = useState('');
   const [isNewBaby, setIsNewBaby] = useState(true);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -116,16 +121,49 @@ const AddGrowthRecord = () => {
     return true;
   };
 
+  // Function to classify growth status based on z-scores (matching backend logic)
+  const classifyGrowthStatus = (zWeight, zHeight) => {
+    if (zWeight === null || zHeight === null) {
+      return 'Normal'; // Default if z-scores are not available
+    }
+
+    if (zWeight < -3 || zHeight < -3) {
+      return zWeight < -3 ? 'Severely Underweight' : 'Severely Stunted';
+    } else if (zWeight < -2 || zHeight < -2) {
+      return zWeight < -2 ? 'Underweight' : 'Stunted';
+    } else if (zWeight > 3) {
+      return 'Severely Overweight';
+    } else if (zWeight > 2) {
+      return 'Overweight';
+    } else {
+      return 'Normal';
+    }
+  };
+
   // Fetch babies list on component mount
   useEffect(() => {
     const fetchBabies = async () => {
       try {
+        console.log('Fetching babies...');
+        const token = localStorage.getItem('access_token');
+        console.log('Auth token exists:', !!token);
+        
         const { data, error } = await babyApi.getAll();
-        if (error) throw new Error(error);
-        setBabies(data || []);
+        console.log('API Response:', { data, error });
+        
+        if (error) {
+          console.error('API Error:', error);
+          throw new Error(error);
+        }
+        
+        setBabies(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.error('Error fetching babies:', err);
-        setError('Failed to load baby profiles');
+        console.error('Error in fetchBabies:', {
+          message: err.message,
+          stack: err.stack,
+          response: err.response?.data
+        });
+        setError('Failed to load baby profiles. Please try refreshing the page or contact support.');
       } finally {
         setLoadingBabies(false);
       }
@@ -148,15 +186,42 @@ const AddGrowthRecord = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    // Validate form first
+    if (!validateForm()) {
+      return;
+    }
     
     setLoading(true);
     setError('');
     
     try {
-      // Prepare payload based on whether it's a new or existing baby
+      // First calculate z-scores
+      console.log('Calculating z-scores...');
+      const zScores = await growthApi.calculateZScores(
+        ageMonths,
+        formData.gender,
+        parseFloat(formData.weight_kg),
+        parseFloat(formData.height_cm)
+      );
+      
+      console.log('Calculated z-scores:', zScores);
+      
+      // Classify the growth status based on z-scores
+      const classification = classifyGrowthStatus(
+        zScores.z_score_weight,
+        zScores.z_score_height
+      );
+      
+      // Set the result to show z-scores and classification to the user
+      setResult({
+        z_score_weight: zScores.z_score_weight,
+        z_score_height: zScores.z_score_height,
+        classification: classification
+      });
+      
+      // Prepare payload with all required fields
       const payload = {
-        baby_id: isNewBaby ? undefined : formData.baby_id,
+        baby_id: isNewBaby ? null : formData.baby_id,
         name: formData.baby_name,
         gender: formData.gender,
         birth_date: format(formData.birth_date, 'yyyy-MM-dd'),
@@ -164,14 +229,38 @@ const AddGrowthRecord = () => {
         age_months: ageMonths,
         weight_kg: parseFloat(formData.weight_kg),
         height_cm: parseFloat(formData.height_cm),
+        z_score_weight: zScores.z_score_weight,
+        z_score_height: zScores.z_score_height,
+        classification: classification // Include classification in payload
       };
       
-      // Call the API service
+      console.log('Submitting growth record with payload:', payload);
+      
+      // Call the API service to save the record
       const { data, error } = await growthApi.create(payload);
       
-      if (error) throw new Error(error);
+      if (error) {
+        console.error('API Error:', error);
+        throw new Error(error);
+      }
       
-      setResult(data);
+      console.log('API Response:', data);
+      
+      // Update the result with any additional data from the server
+      setResult(prev => ({
+        ...prev,
+        ...data,
+        // Ensure we always have the latest z-scores
+        z_score_weight: data.z_score_weight || prev.z_score_weight,
+        z_score_height: data.z_score_height || prev.z_score_height
+      }));
+      
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: 'Growth record saved successfully!',
+        severity: 'success'
+      });
       
       // Reset form but keep baby selection if it's an existing baby
       setFormData(prev => ({
@@ -181,12 +270,14 @@ const AddGrowthRecord = () => {
         height_cm: '',
       }));
       
-      // Show success message
-      setError('');
-      
-    } catch (err) {
-      console.error('Error submitting growth record:', err);
-      setError(err.message || 'Failed to save growth record. Please try again.');
+    } catch (error) {
+      console.error('Error saving growth record:', error);
+      setError(error.message || 'Failed to save growth record');
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to save growth record',
+        severity: 'error'
+      });
     } finally {
       setLoading(false);
     }

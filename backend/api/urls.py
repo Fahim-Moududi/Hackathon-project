@@ -25,4 +25,7 @@ urlpatterns = [
     
     # Endpoint to predict next month's height and weight using regression model
     path('growth/predict-next-month/', views.predict_growth, name='predict-growth'),
+    
+    # Endpoint to calculate z-scores for height and weight
+    path('growth/calculate-zscores/', views.calculate_zscores, name='calculate-zscores'),
 ]

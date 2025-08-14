@@ -15,17 +15,29 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const storedUser = authService.getCurrentUser();
-        const storedBaby = authService.getCurrentBaby();
+        console.log('Initializing auth state...');
+        const [storedUser, storedBaby] = await Promise.all([
+          authService.getCurrentUser(),
+          authService.getCurrentBaby()
+        ]);
         
+        console.log('Stored user:', storedUser);
+        console.log('Stored baby:', storedBaby);
+        
+        // Only set user and baby if both are valid
         if (storedUser && storedBaby) {
           setUser(storedUser);
           setBaby(storedBaby);
+        } else {
+          console.warn('Incomplete auth data in storage. Require both user and baby.');
+          // Clear any partial auth data
+          authService.logout();
         }
       } catch (err) {
         console.error('Failed to initialize auth:', err);
-        // Clear invalid auth data
+        // Clear any potentially corrupted auth data
         authService.logout();
+        setError('Failed to load user session. Please log in again.');
       } finally {
         setLoading(false);
       }

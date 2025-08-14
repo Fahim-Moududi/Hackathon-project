@@ -12,9 +12,9 @@ const api = axios.create({
 // Add a request interceptor to include auth token if available
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem('access_token');
     if (token) {
-      config.headers.Authorization = `Token ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -25,15 +25,106 @@ api.interceptors.request.use(
 
 // Growth Records API
 export const growthApi = {
+  // Helper function to calculate z-scores
+  calculateZScores: async (ageMonths, gender, weightKg, heightCm) => {
+    console.log('Calculating z-scores for:', { ageMonths, gender, weightKg, heightCm });
+    
+    try {
+      // Call the backend API to calculate z-scores
+      const response = await api.post('/growth/calculate-zscores/', {
+        age_months: ageMonths,
+        gender: gender,
+        weight_kg: weightKg,
+        height_cm: heightCm
+      });
+      
+      console.log('Z-scores from backend:', response.data);
+      return {
+        z_score_weight: response.data.z_score_weight,
+        z_score_height: response.data.z_score_height
+      };
+    } catch (error) {
+      console.error('Error calculating z-scores:', error);
+      // Return null values if there's an error
+      return {
+        z_score_weight: null,
+        z_score_height: null
+      };
+    }
+  },
+  
   // Create a new growth record
   create: async (data) => {
     try {
-      const response = await api.post('/growth/', data);
+      console.log('Sending request to /growth/ with data:', data);
+      
+      // Calculate z-scores if we have the required data
+      let zScores = { z_score_weight: null, z_score_height: null };
+      if (data.age_months && data.gender && data.weight_kg && data.height_cm) {
+        try {
+          zScores = growthApi.calculateZScores(
+            data.age_months,
+            data.gender,
+            data.weight_kg,
+            data.height_cm
+          );
+          console.log('Calculated z-scores:', zScores);
+        } catch (zScoreError) {
+          console.error('Error calculating z-scores:', zScoreError);
+          // Continue without z-scores - backend will calculate them
+        }
+      }
+      
+      // Ensure we're not sending undefined or null values for required fields
+      const payload = {
+        ...data,
+        // Convert empty strings to null for optional fields
+        baby_id: data.baby_id || null,
+        weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : null,
+        height_cm: data.height_cm ? parseFloat(data.height_cm) : null,
+        // Include z-scores in the payload
+        ...zScores
+      };
+      
+      console.log('Final payload with z-scores:', payload);
+      
+      const response = await api.post('/growth/', payload);
+      console.log('Response from /growth/:', response);
+      
       return { data: response.data, error: null };
     } catch (error) {
+      console.error('Error in growthApi.create:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+          data: error.config?.data
+        }
+      });
+      
+      let errorMessage = 'Failed to create growth record';
+      
+      if (error.response) {
+        // Handle 400 Bad Request with field-specific errors
+        if (error.response.status === 400 && error.response.data) {
+          const fieldErrors = Object.entries(error.response.data)
+            .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
+            .join('; ');
+          errorMessage = fieldErrors || JSON.stringify(error.response.data);
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      }
+      
       return { 
         data: null, 
-        error: error.response?.data?.message || 'Failed to create growth record' 
+        error: errorMessage
       };
     }
   },
@@ -96,12 +187,35 @@ export const babyApi = {
   // Get all babies for current user
   getAll: async () => {
     try {
-      const response = await api.get('/babies/');
+      console.log('Making request to /babies/ endpoint');
+      const token = localStorage.getItem('access_token');
+      console.log('Using token:', token ? `${token.substring(0, 10)}...` : 'No token found');
+      
+      const response = await api.get('/babies/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Response from /babies/:', response);
       return { data: response.data, error: null };
     } catch (error) {
+      console.error('Error in babyApi.getAll:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers
+        }
+      });
+      
       return { 
         data: null, 
-        error: error.response?.data?.message || 'Failed to fetch babies' 
+        error: error.response?.data?.message || error.message || 'Failed to fetch babies' 
       };
     }
   },

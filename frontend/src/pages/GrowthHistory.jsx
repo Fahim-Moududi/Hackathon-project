@@ -121,10 +121,15 @@ const GrowthHistory = () => {
       setLoading(!refreshing);
       setError('');
       
+      // Fetch growth records from the backend
       const { data: recordsData, error: recordsError } = await growthApi.getAll();
       if (recordsError) throw new Error(recordsError);
       
-      // Sort records by date (newest first)
+      if (!recordsData || !Array.isArray(recordsData)) {
+        throw new Error('Invalid data received from server');
+      }
+      
+      // Sort records by date (newest first for the table)
       const sortedRecords = [...recordsData].sort((a, b) => 
         new Date(b.date) - new Date(a.date)
       );
@@ -132,7 +137,7 @@ const GrowthHistory = () => {
       setRecords(sortedRecords);
       setFilteredRecords(sortedRecords);
       
-      // Prepare chart data
+      // Prepare chart data with the fetched records
       prepareChartData(sortedRecords);
       
     } catch (err) {
@@ -147,16 +152,49 @@ const GrowthHistory = () => {
   // Fetch baby profiles
   const fetchBabies = async () => {
     try {
-      const { data, error } = await babyApi.getAll();
-      if (error) throw new Error(error);
+      const response = await babyApi.getAll();
+      if (response.error) throw new Error(response.error);
       
-      setBabies(data || []);
+      // Ensure we always set an array, even if data is null/undefined
+      const babiesData = Array.isArray(response.data) ? response.data : 
+                       (response.data && Array.isArray(response.data.results)) ? response.data.results : [];
+      
+      setBabies(babiesData);
+      
+      // If there's only one baby, select it by default
+      if (babiesData.length === 1) {
+        setSelectedBaby(String(babiesData[0].id));
+      }
     } catch (err) {
       console.error('Error fetching babies:', err);
-      // Don't block the UI for this error
+      // Set empty array on error to prevent map errors
+      setBabies([]);
     }
   };
   
+  // Helper function to get z-score from a record
+  const getZScore = (record, type) => {
+    if (!record) return null;
+    
+    // Check for direct z_score properties first
+    if (type === 'weight' && record.z_score_weight !== undefined) {
+      return record.z_score_weight;
+    } else if (type === 'height' && record.z_score_height !== undefined) {
+      return record.z_score_height;
+    }
+    
+    // Check for nested z_scores object
+    if (record.z_scores) {
+      if (type === 'weight' && record.z_scores.weight !== undefined) {
+        return record.z_scores.weight;
+      } else if (type === 'height' && record.z_scores.height !== undefined) {
+        return record.z_scores.height;
+      }
+    }
+    
+    return null;
+  };
+
   // Prepare chart data
   const prepareChartData = (records) => {
     if (!records || records.length === 0) {
@@ -167,6 +205,21 @@ const GrowthHistory = () => {
     // Sort by age_months for proper chart rendering
     const sortedByAge = [...records].sort((a, b) => a.age_months - b.age_months);
     
+    // Helper function to safely parse z-scores
+    const getZScore = (record, type) => {
+      // First try direct property access
+      if (record[`z_score_${type}`] !== undefined && record[`z_score_${type}`] !== null) {
+        return record[`z_score_${type}`];
+      }
+      // Then check if z_scores object exists
+      if (record.z_scores && record.z_scores[type] !== undefined) {
+        return record.z_scores[type];
+      }
+      // Default to null if not found
+      return null;
+    };
+    
+    // Weight Chart Data
     const weightData = {
       labels: sortedByAge.map(record => `${record.age_months} mo`),
       datasets: [
@@ -175,14 +228,16 @@ const GrowthHistory = () => {
           data: sortedByAge.map(record => record.weight_kg),
           borderColor: theme.palette.primary.main,
           backgroundColor: `${theme.palette.primary.main}20`,
+          borderWidth: 2,
           tension: 0.3,
           fill: true,
           yAxisID: 'y',
         },
         {
           label: 'Weight Z-Score',
-          data: sortedByAge.map(record => record.z_score_weight),
+          data: sortedByAge.map(record => getZScore(record, 'weight')),
           borderColor: theme.palette.secondary.main,
+          borderWidth: 2,
           borderDash: [5, 5],
           backgroundColor: 'transparent',
           tension: 0.3,
@@ -191,6 +246,7 @@ const GrowthHistory = () => {
       ]
     };
     
+    // Height Chart Data
     const heightData = {
       labels: sortedByAge.map(record => `${record.age_months} mo`),
       datasets: [
@@ -198,6 +254,7 @@ const GrowthHistory = () => {
           label: 'Height (cm)',
           data: sortedByAge.map(record => record.height_cm),
           borderColor: theme.palette.success.main,
+          borderWidth: 2,
           backgroundColor: `${theme.palette.success.main}20`,
           tension: 0.3,
           fill: true,
@@ -205,7 +262,7 @@ const GrowthHistory = () => {
         },
         {
           label: 'Height Z-Score',
-          data: sortedByAge.map(record => record.z_score_height),
+          data: sortedByAge.map(record => getZScore(record, 'height')),
           borderColor: theme.palette.warning.main,
           borderDash: [5, 5],
           backgroundColor: 'transparent',
@@ -218,6 +275,85 @@ const GrowthHistory = () => {
     setChartData({ weight: weightData, height: heightData });
   };
   
+  // Chart options
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: 'Age (months)'
+        }
+      },
+      y: {
+        type: 'linear',
+        display: true,
+        position: 'left',
+        title: { 
+          display: true, 
+          text: 'Measurement (kg/cm)' 
+        },
+        beginAtZero: true
+      },
+      zScoreAxis: {
+        type: 'linear',
+        display: true,
+        position: 'right',
+        title: { 
+          display: true, 
+          text: 'Z-Score (SD)' 
+        },
+        grid: {
+          drawOnChartArea: false
+        },
+        min: -3,
+        max: 3,
+        ticks: {
+          stepSize: 1,
+          callback: value => `${value} SD`
+        }
+      }
+    },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            let label = context.dataset.label || '';
+            if (label) label += ': ';
+            if (context.parsed.y !== null) {
+              label += context.parsed.y.toFixed(2);
+              if (label.includes('Z-Score')) {
+                label += ' SD';
+              } else if (label.includes('kg')) {
+                label += ' kg';
+              } else if (label.includes('cm')) {
+                label += ' cm';
+              }
+            }
+            return label;
+          }
+        }
+      },
+      legend: {
+        position: 'top'
+      }
+    },
+    elements: {
+      line: {
+        tension: 0.3
+      },
+      point: {
+        radius: 4,
+        hoverRadius: 6
+      }
+    }
+  };
+
   // Filter records by selected baby
   const handleBabyFilter = (event) => {
     const babyId = event.target.value;
@@ -254,59 +390,6 @@ const GrowthHistory = () => {
     }
   };
   
-  // Chart options
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    scales: {
-      y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        title: {
-          display: true,
-          text: 'Measurement Value',
-        },
-      },
-      zScoreAxis: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        grid: {
-          drawOnChartArea: false,
-        },
-        title: {
-          display: true,
-          text: 'Z-Score',
-        },
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Age (months)',
-        },
-      },
-    },
-    plugins: {
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            const label = context.dataset.label || '';
-            const value = context.parsed.y;
-            return `${label}: ${value.toFixed(2)}`;
-          },
-        },
-      },
-      legend: {
-        position: 'top',
-      },
-    },
-  };
-
   useEffect(() => {
     fetchRecords();
     fetchBabies();
@@ -385,12 +468,17 @@ const GrowthHistory = () => {
                   </InputAdornment>
                 }
                 disabled={loading || babies.length === 0}
+                renderValue={(selected) => {
+                  if (selected === 'all') return 'All Children';
+                  const baby = babies.find(b => String(b.id) === selected);
+                  return baby ? baby.name : 'Select a child';
+                }}
               >
                 <MenuItem value="all">
                   <em>All Children</em>
                 </MenuItem>
-                {babies.map((baby) => (
-                  <MenuItem key={baby.id} value={baby.id}>
+                {Array.isArray(babies) && babies.map((baby) => (
+                  <MenuItem key={baby.id} value={String(baby.id)}>
                     {baby.name}
                   </MenuItem>
                 ))}
@@ -413,81 +501,97 @@ const GrowthHistory = () => {
             <CardHeader 
               title="Weight Progress" 
               action={
-                <Tooltip title="Weight-for-age Z-scores (WAZ) indicate how a child's weight compares to the WHO growth standards.">
-                  <WarningIcon color="action" fontSize="small" sx={{ mt: 1 }} />
+                <Tooltip title="Refresh data">
+                  <IconButton 
+                    onClick={handleRefresh} 
+                    disabled={refreshing}
+                    color="primary"
+                    size="small"
+                  >
+                    <RefreshIcon />
+                  </IconButton>
                 </Tooltip>
               }
             />
             <Divider />
             <CardContent>
               <ChartContainer>
-                {chartData.weight ? (
-                  <Line data={chartData.weight} options={chartOptions} />
-                ) : (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    height: '100%',
-                    flexDirection: 'column',
-                    gap: 2,
-                    color: 'text.secondary'
-                  }}>
-                    <TimelineIcon fontSize="large" />
-                    <Typography>No weight data available</Typography>
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      component={Link} 
-                      to="/add-growth"
-                      startIcon={<AddIcon />}
-                    >
-                      Add Record
-                    </Button>
+                {loading ? (
+                  <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                    <CircularProgress size={24} />
                   </Box>
+                ) : (!chartData.weight || chartData.weight.labels.length === 0) ? (
+                  <Box 
+                    display="flex" 
+                    justifyContent="center" 
+                    alignItems="center" 
+                    height="100%"
+                    minHeight="200px"
+                    color="text.secondary"
+                    textAlign="center"
+                    p={2}
+                  >
+                    <Typography variant="body1">
+                      No weight data available. Add your first record to see the chart.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Line 
+                    data={chartData.weight} 
+                    options={chartOptions}
+                    redraw={refreshing}
+                  />
                 )}
               </ChartContainer>
             </CardContent>
           </Card>
         </Grid>
-        
+
         <Grid item xs={12} md={6}>
           <Card>
             <CardHeader 
-              title="Height Progress"
+              title="Height Progress" 
               action={
-                <Tooltip title="Height-for-age Z-scores (HAZ) indicate how a child's height compares to the WHO growth standards.">
-                  <WarningIcon color="action" fontSize="small" sx={{ mt: 1 }} />
+                <Tooltip title="Refresh data">
+                  <IconButton 
+                    onClick={handleRefresh} 
+                    disabled={refreshing}
+                    color="primary"
+                    size="small"
+                  >
+                    <RefreshIcon />
+                  </IconButton>
                 </Tooltip>
               }
             />
             <Divider />
             <CardContent>
               <ChartContainer>
-                {chartData.height ? (
-                  <Line data={chartData.height} options={chartOptions} />
-                ) : (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    height: '100%',
-                    flexDirection: 'column',
-                    gap: 2,
-                    color: 'text.secondary'
-                  }}>
-                    <TimelineIcon fontSize="large" />
-                    <Typography>No height data available</Typography>
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      component={Link} 
-                      to="/add-growth"
-                      startIcon={<AddIcon />}
-                    >
-                      Add Record
-                    </Button>
+                {loading ? (
+                  <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                    <CircularProgress size={24} />
                   </Box>
+                ) : (!chartData.height || chartData.height.labels.length === 0) ? (
+                  <Box 
+                    display="flex" 
+                    justifyContent="center" 
+                    alignItems="center" 
+                    height="100%"
+                    minHeight="200px"
+                    color="text.secondary"
+                    textAlign="center"
+                    p={2}
+                  >
+                    <Typography variant="body1">
+                      No height data available. Add your first record to see the chart.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Line 
+                    data={chartData.height} 
+                    options={chartOptions}
+                    redraw={refreshing}
+                  />
                 )}
               </ChartContainer>
             </CardContent>
@@ -565,10 +669,10 @@ const GrowthHistory = () => {
                             {record.height_cm ? record.height_cm.toFixed(1) : 'N/A'}
                           </TableCell>
                           <TableCell align="right">
-                            {record.z_score_weight ? record.z_score_weight.toFixed(2) : 'N/A'}
+                            {getZScore(record, 'weight') !== null ? getZScore(record, 'weight').toFixed(2) : 'N/A'}
                           </TableCell>
                           <TableCell align="right">
-                            {record.z_score_height ? record.z_score_height.toFixed(2) : 'N/A'}
+                            {getZScore(record, 'height') !== null ? getZScore(record, 'height').toFixed(2) : 'N/A'}
                           </TableCell>
                           <TableCell>
                             <StatusChip 

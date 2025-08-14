@@ -212,6 +212,15 @@ def predict_growth_risk(age_months, gender, height_cm=None, weight_kg=None,
     }
     
     try:
+        # Initialize z_scores with default values
+        z_scores = {
+            'weight': z_score_weight if z_score_weight is not None else None,
+            'height': z_score_height if z_score_height is not None else None
+        }
+        
+        # Store in result
+        result['z_scores'] = z_scores
+        
         # Convert inputs to appropriate types
         age_months = int(age_months)
         gender = str(gender).lower()
@@ -241,16 +250,29 @@ def predict_growth_risk(age_months, gender, height_cm=None, weight_kg=None,
             z_calc = ZScoreCalculator()
             
             if z_score_weight is None and weight_kg is not None:
-                z_score_weight = z_calc.calculate_weight_z_score(
-                    weight_kg, age_months, gender
-                )
-                debug_info['calculations']['calculated_z_weight'] = z_score_weight
+                try:
+                    z_score_weight = z_calc.calculate_weight_z_score(
+                        weight_kg, age_months, gender
+                    )
+                    z_scores['weight'] = z_score_weight
+                    debug_info['calculations']['calculated_z_weight'] = z_score_weight
+                except Exception as e:
+                    print(f"Error calculating weight z-score: {str(e)}")
+                    z_score_weight = 0.0
             
             if z_score_height is None and height_cm is not None:
-                z_score_height = z_calc.calculate_height_z_score(
-                    height_cm, age_months, gender
-                )
-                debug_info['calculations']['calculated_z_height'] = z_score_height
+                try:
+                    z_score_height = z_calc.calculate_height_z_score(
+                        height_cm, age_months, gender
+                    )
+                    z_scores['height'] = z_score_height
+                    debug_info['calculations']['calculated_z_height'] = z_score_height
+                except Exception as e:
+                    print(f"Error calculating height z-score: {str(e)}")
+                    z_score_height = 0.0
+                    
+            # Update z_scores in result with any calculated values
+            result['z_scores'] = z_scores
                 
         except Exception as e:
             debug_info['calculations']['z_score_error'] = str(e)
@@ -378,6 +400,7 @@ def predict_growth_risk(age_months, gender, height_cm=None, weight_kg=None,
                 'details': f"Predicted {risk_status} with {confidence:.1%} confidence" + 
                           (" (anomaly detected)" if is_anomaly else ""),
                 'feature_vector': feature_vector,
+                'z_scores': z_scores,  # Ensure z_scores are included in the response
                 'debug_info': debug_info if debug else None
             })
             
