@@ -12,6 +12,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+@api_view(['GET'])
+def list_babies(request):
+    """
+    List all babies.
+    """
+    try:
+        babies = Baby.objects.all()
+        serializer = BabySerializer(babies, many=True)
+        return Response({
+            'status': 'success',
+            'data': serializer.data
+        })
+    except Exception as e:
+        logger.error(f"Error fetching babies: {str(e)}")
+        return Response(
+            {'status': 'error', 'message': 'Failed to fetch babies'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 @api_view(['POST'])
 def add_growth_record(request):
     """

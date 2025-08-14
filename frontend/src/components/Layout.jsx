@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { styled, useTheme } from '@mui/material/styles';
 import {
   Box,
@@ -15,7 +15,11 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
-  useMediaQuery
+  useMediaQuery,
+  Button,
+  Avatar,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -24,8 +28,11 @@ import {
   AddCircleOutline as AddIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
-  Home as HomeIcon
+  Home as HomeIcon,
+  Logout as LogoutIcon,
+  AccountCircle as AccountCircleIcon
 } from '@mui/icons-material';
+import { useAuth } from '../contexts/AuthContext';
 
 const drawerWidth = 240;
 
@@ -82,8 +89,12 @@ const menuItems = [
 const Layout = ({ children }) => {
   const theme = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, isAuthenticated } = useAuth();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [open, setOpen] = useState(!isMobile);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const openMenu = Boolean(anchorEl);
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -95,6 +106,20 @@ const Layout = ({ children }) => {
 
   const toggleDrawer = () => {
     setOpen(!open);
+  };
+
+  const handleMenu = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    handleClose();
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -110,9 +135,61 @@ const Layout = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Child Growth Tracker
           </Typography>
+          
+          <div>
+            <IconButton
+              size="large"
+              aria-label="account of current user"
+              aria-controls="menu-appbar"
+              aria-haspopup="true"
+              onClick={handleMenu}
+              color="inherit"
+            >
+              <AccountCircleIcon />
+            </IconButton>
+            <Menu
+              id="menu-appbar"
+              anchorEl={anchorEl}
+              anchorOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              open={openMenu}
+              onClose={handleClose}
+            >
+              {isAuthenticated() ? (
+                <MenuItem onClick={handleLogout}>
+                  <ListItemIcon>
+                    <LogoutIcon fontSize="small" />
+                  </ListItemIcon>
+                  Logout
+                </MenuItem>
+              ) : (
+                <>
+                  <MenuItem component={Link} to="/login">
+                    <ListItemIcon>
+                      <LogoutIcon fontSize="small" />
+                    </ListItemIcon>
+                    Login
+                  </MenuItem>
+                  <MenuItem component={Link} to="/signup">
+                    <ListItemIcon>
+                      <AccountCircleIcon fontSize="small" />
+                    </ListItemIcon>
+                    Sign Up
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
+          </div>
         </Toolbar>
       </AppBarStyled>
       
@@ -130,7 +207,7 @@ const Layout = ({ children }) => {
         open={open}
         onClose={handleDrawerClose}
         ModalProps={{
-          keepMounted: true, // Better open performance on mobile
+          keepMounted: true,
         }}
       >
         <DrawerHeader>

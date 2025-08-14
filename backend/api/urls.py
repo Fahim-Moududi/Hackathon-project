@@ -1,7 +1,16 @@
 from django.urls import path
 from . import views
+from .auth_views import SignupView, LoginView, RefreshTokenView
 
 urlpatterns = [
+    # Authentication endpoints
+    path('auth/signup/', SignupView.as_view(), name='signup'),
+    path('auth/login/', LoginView.as_view(), name='login'),
+    path('auth/refresh/', RefreshTokenView.as_view(), name='token-refresh'),
+    
+    # Endpoint to list all babies
+    path('babies/', views.list_babies, name='list-babies'),
+    
     # Endpoint to add a new growth record and get risk prediction
     path('growth/', views.add_growth_record, name='add-growth-record'),
     
